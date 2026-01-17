@@ -25,6 +25,26 @@ function getAvailableCommands(ctx: Context) {
 }
 
 /**
+ * 创建来源过滤器 Schema
+ */
+const createSourceFilterSchema = () => {
+    return Schema.array(Schema.intersect([
+        Schema.object({
+            type: Schema.union([
+                Schema.const('guild' as const).description('群号：只处理指定群的消息'),
+                Schema.const('user' as const).description('用户：只处理指定用户的消息'),
+                Schema.const('channel' as const).description('频道：只处理指定频道的消息'),
+                Schema.const('private' as const).description('私聊：只处理私聊消息（值填任意）'),
+            ]).description('过滤类型'),
+            value: Schema.string().default('').description('匹配值（群号/用户ID/频道ID，私聊时留空即可）'),
+        }).description('来源过滤规则'),
+    ]))
+        .role('table')
+        .default([])
+        .description('来源过滤列表（白名单：只处理列表中的；黑名单：不处理列表中的）')
+}
+
+/**
  * 创建指令选择 Schema
  */
 const createCommandSelectSchema = (ctx: Context) => {
@@ -47,6 +67,7 @@ const createCommandSelectSchema = (ctx: Context) => {
  */
 export const createBotConfigSchema = (ctx: Context): Schema<BotConfig> => {
     const commandSelectSchema = createCommandSelectSchema(ctx)
+    const sourceFilterSchema = createSourceFilterSchema()
     const commands = getAvailableCommands(ctx)
     const commandList = commands.map(c => c.name)
 
@@ -62,7 +83,7 @@ export const createBotConfigSchema = (ctx: Context): Schema<BotConfig> => {
             enabled: Schema.boolean()
                 .default(true)
                 .description('是否启用此 bot 的响应控制'),
-        }).description('Bot 标识'),
+        }).description('========== Bot 标识 =========='),
 
         // === 2. 响应模式配置 ===
         Schema.object({
@@ -73,9 +94,24 @@ export const createBotConfigSchema = (ctx: Context): Schema<BotConfig> => {
                     .description('[放行模式] 非指令消息全部放行，适合 LLM 智能对话 Bot'),
             ]).default('unconstrained')
                 .description('响应模式'),
-        }).description('响应模式'),
+        }).description('========== 响应模式 =========='),
 
-        // === 3. 指令过滤配置（可选） ===
+        // === 3. 来源过滤配置（可选） ===
+        Schema.object({
+            enableSourceFilter: Schema.boolean()
+                .default(false)
+                .description('是否启用来源过滤（根据群号/用户/频道限制响应范围）'),
+            sourceFilters: sourceFilterSchema,
+            sourceFilterMode: Schema.union([
+                Schema.const('blacklist' as const)
+                    .description('黑名单：不处理列表中的来源'),
+                Schema.const('whitelist' as const)
+                    .description('白名单：只处理列表中的来源'),
+            ]).default('whitelist')
+                .description('来源过滤模式'),
+        }).description('========== 来源过滤（可选） =========='),
+
+        // === 4. 指令过滤配置（可选） ===
         Schema.object({
             enableCommandFilter: Schema.boolean()
                 .default(false)
@@ -88,9 +124,9 @@ export const createBotConfigSchema = (ctx: Context): Schema<BotConfig> => {
                     .description('白名单：响应列表外的指令'),
             ]).default('blacklist')
                 .description('指令过滤模式'),
-        }).description('指令配置（可选，不启用则所有指令都放行）'),
+        }).description('========== 指令配置（可选） =========='),
 
-        // === 4. 关键词配置（约束模式专用） ===
+        // === 5. 关键词配置（约束模式专用） ===
         Schema.object({
             keywords: Schema.array(Schema.string())
                 .role('table')
@@ -103,7 +139,7 @@ export const createBotConfigSchema = (ctx: Context): Schema<BotConfig> => {
                     .description('白名单：只响应不匹配关键词的消息'),
             ]).default('blacklist')
                 .description('关键词过滤模式'),
-        }).description('关键词配置（仅约束模式需要配置）'),
+        }).description('========== 关键词配置（约束模式专用） =========='),
     ]) as Schema<BotConfig>
 }
 
@@ -146,13 +182,31 @@ export const Config = Schema.intersect([
                 platform: Schema.string().required().description('平台名称（如 onebot, qq, discord）'),
                 selfId: Schema.string().required().description('Bot 账号 ID'),
                 enabled: Schema.boolean().default(true).description('是否启用此 bot 的响应控制'),
-            }).description('Bot 标识'),
+            }).description('========== Bot 标识 =========='),
             Schema.object({
                 mode: Schema.union([
                     Schema.const('constrained' as const).description('[约束模式] 非指令消息必须匹配关键词才响应'),
                     Schema.const('unconstrained' as const).description('[放行模式] 非指令消息全部放行'),
                 ]).default('unconstrained').description('响应模式'),
-            }).description('响应模式'),
+            }).description('========== 响应模式 =========='),
+            Schema.object({
+                enableSourceFilter: Schema.boolean().default(false).description('是否启用来源过滤'),
+                sourceFilters: Schema.array(Schema.intersect([
+                    Schema.object({
+                        type: Schema.union([
+                            Schema.const('guild' as const).description('群号'),
+                            Schema.const('user' as const).description('用户'),
+                            Schema.const('channel' as const).description('频道'),
+                            Schema.const('private' as const).description('私聊'),
+                        ]).description('过滤类型'),
+                        value: Schema.string().default('').description('匹配值'),
+                    }).description('来源过滤规则'),
+                ])).role('table').default([]).description('来源过滤列表'),
+                sourceFilterMode: Schema.union([
+                    Schema.const('blacklist' as const).description('黑名单'),
+                    Schema.const('whitelist' as const).description('白名单'),
+                ]).default('whitelist').description('来源过滤模式'),
+            }).description('========== 来源过滤（可选） =========='),
             Schema.object({
                 enableCommandFilter: Schema.boolean().default(false).description('是否启用指令过滤'),
                 commands: Schema.array(Schema.string()).role('table').default([]).description('允许响应的指令列表'),
@@ -160,14 +214,14 @@ export const Config = Schema.intersect([
                     Schema.const('blacklist' as const).description('黑名单'),
                     Schema.const('whitelist' as const).description('白名单'),
                 ]).default('blacklist').description('指令过滤模式'),
-            }).description('指令配置（可选）'),
+            }).description('========== 指令配置（可选） =========='),
             Schema.object({
                 keywords: Schema.array(Schema.string()).role('table').default([]).description('关键词列表'),
                 keywordFilterMode: Schema.union([
                     Schema.const('blacklist' as const).description('黑名单'),
                     Schema.const('whitelist' as const).description('白名单'),
                 ]).default('blacklist').description('关键词过滤模式'),
-            }).description('关键词配置（约束模式专用）'),
+            }).description('========== 关键词配置（约束模式专用） =========='),
         ]))
             .role('table')
             .default([])
