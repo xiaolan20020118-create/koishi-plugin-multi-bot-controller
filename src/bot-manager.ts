@@ -53,24 +53,72 @@ export class BotManager {
             return false
         }
 
+        // 1. 检查来源过滤
+        if (!this.checkSourceFilter(session, botConfig)) {
+            return false
+        }
+
         const isCommand = session.argv?.command !== null
 
-        // 1. 指令处理：两种模式逻辑相同
+        // 2. 指令处理：两种模式逻辑相同
         if (isCommand) {
             return this.checkCommandPermission(session, botConfig)
         }
 
-        // 2. 非指令处理：根据模式决定
+        // 3. 非指令处理：根据模式决定
         switch (botConfig.mode) {
             case 'unconstrained':
                 this.debugLog(session, 'unconstrained 模式：非指令消息放行')
                 return true
 
             case 'constrained':
-                const matched = this.checkKeywordMatch(session.content, botConfig)
+                const matched = this.checkKeywordMatch(session.content || '', botConfig)
                 this.debugLog(session, `constrained 模式：关键词匹配结果 = ${matched}`)
                 return matched
         }
+    }
+
+    /**
+     * 检查来源过滤
+     * @returns true 表示通过来源检查，false 表示被过滤
+     */
+    private checkSourceFilter(session: Session, botConfig: BotConfig): boolean {
+        const { enableSourceFilter, sourceFilters = [], sourceFilterMode = 'whitelist' } = botConfig
+
+        // 如果未启用来源过滤，全部通过
+        if (!enableSourceFilter) {
+            return true
+        }
+
+        // 如果过滤器列表为空，全部通过
+        if (sourceFilters.length === 0) {
+            return true
+        }
+
+        // 检查是否有任何过滤器匹配
+        const matched = sourceFilters.some(filter => {
+            switch (filter.type) {
+                case 'guild':
+                    // 群号匹配
+                    return session.guildId === filter.value
+                case 'user':
+                    // 用户 ID 匹配
+                    return session.userId === filter.value
+                case 'channel':
+                    // 频道 ID 匹配
+                    return session.channelId === filter.value
+                case 'private':
+                    // 私聊匹配
+                    return session.isDirect === true
+            }
+        })
+
+        const result = sourceFilterMode === 'whitelist' ? matched : !matched
+
+        this.debugLog(session,
+            `来源过滤：${matched ? '匹配' : '不匹配'}，${sourceFilterMode} 模式 → ${result ? '通过' : '阻止'}`)
+
+        return result
     }
 
     /**
@@ -78,6 +126,12 @@ export class BotManager {
      * 两种模式的指令处理逻辑完全相同
      */
     private checkCommandPermission(session: Session, botConfig: BotConfig): boolean {
+        // 修复：确保 command 存在
+        if (!session.argv?.command) {
+            this.debugLog(session, '指令消息但 command 为空，放行')
+            return true
+        }
+
         const commandName = session.argv.command.name
         const { enableCommandFilter, commands, commandFilterMode } = botConfig
 

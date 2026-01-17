@@ -7,6 +7,17 @@ export type ResponseMode = 'constrained' | 'unconstrained'
 /** 过滤模式 */
 export type FilterMode = 'blacklist' | 'whitelist'
 
+/** 来源过滤器类型 */
+export type SourceFilterType = 'guild' | 'user' | 'channel' | 'private'
+
+/** 来源过滤器 */
+export interface SourceFilter {
+    /** 过滤器类型 */
+    type: SourceFilterType
+    /** 匹配值（群号/用户ID/频道ID等） */
+    value: string
+}
+
 /** 单个 Bot 的配置 */
 export interface BotConfig {
     /** 平台名称 (如 'qq', 'discord') */
@@ -27,6 +38,12 @@ export interface BotConfig {
     keywords: string[]
     /** 关键词过滤模式 */
     keywordFilterMode: FilterMode
+    /** 是否启用来源过滤 */
+    enableSourceFilter?: boolean
+    /** 来源过滤器列表 */
+    sourceFilters?: SourceFilter[]
+    /** 来源过滤模式 */
+    sourceFilterMode?: FilterMode
 }
 
 /** 插件配置 */
