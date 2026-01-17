@@ -79,10 +79,17 @@ export class BotManager {
      */
     private checkCommandPermission(session: Session, botConfig: BotConfig): boolean {
         const commandName = session.argv.command.name
-        const { commands, commandFilterMode } = botConfig
+        const { enableCommandFilter, commands, commandFilterMode } = botConfig
+
+        // 如果未启用指令过滤，所有指令都放行
+        if (!enableCommandFilter) {
+            this.debugLog(session,
+                `指令 "${commandName}"：未启用指令过滤，放行`)
+            return true
+        }
 
         if (commands.length === 0) {
-            // 空列表 = 允许所有指令
+            // 启用过滤但列表为空 = 允许所有指令
             const result = commandFilterMode === 'blacklist'
             this.debugLog(session,
                 `指令 "${commandName}"：列表为空，${commandFilterMode} 模式 → ${result}`)

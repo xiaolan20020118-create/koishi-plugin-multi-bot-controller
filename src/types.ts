@@ -17,6 +17,8 @@ export interface BotConfig {
     enabled: boolean
     /** 响应模式 */
     mode: ResponseMode
+    /** 是否启用指令过滤 */
+    enableCommandFilter?: boolean
     /** 允许的指令列表（空=所有） */
     commands: string[]
     /** 指令过滤模式 */
